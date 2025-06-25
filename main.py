@@ -71,11 +71,11 @@ def get_data():
         response = None
         try:
             date_string = time_utils.get_api_date()
-
+            # https://api.raporty.pse.pl/api/rce-pln?%24select=dtime_utc%2Crce_pln&%24filter=business_date%20eq%20%272025-06-25%27&%24orderby=dtime_utc%20desc
             url = (
                 "https://api.raporty.pse.pl/api/rce-pln"
-                f"?$filter=business_date eq '{date_string}'"
-                "&$select=rce_pln,dtime_utc,period_utc"
+                f"?$select=dtime_utc,rce_pln&$filter=business_date eq '{date_string}'"
+                "&$orderby=dtime_utc desc"
             )
             oled.fill(0)
             oled.text('Getting PSE data', 0, 0)
@@ -138,7 +138,6 @@ def parse_data(json_data):
         # Append to list
         parsed_data.append({
             'datetime': date_str,
-            'period': row.get('period_utc'),
             'timestamp_from': unix_timestamp_from,
             'timestamp_to': unix_timestamp_to,
             'price': row['rce_pln']

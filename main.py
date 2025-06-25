@@ -65,12 +65,18 @@ def get_data():
     max_retries = 3
     retry_count = 0
     led.value(1)
-    
+
     while retry_count < max_retries:
+        gc.collect()
+        response = None
         try:
             date_string = time_utils.get_api_date()
 
-            url = f"https://api.raporty.pse.pl/api/rce-pln?$filter=doba eq '{date_string}'&$select=rce_pln,udtczas"
+            url = (
+                "https://api.raporty.pse.pl/api/rce-pln"
+                f"?$filter=business_date eq '{date_string}'"
+                "&$select=rce_pln,dtime_utc,period_utc"
+            )
             oled.fill(0)
             oled.text('Getting PSE data', 0, 0)
             oled.show()
@@ -80,12 +86,19 @@ def get_data():
             if response.status_code == 200:
                 print('Data fetched')
                 led.value(0)
-                gc.collect()
                 try:
-                    return json.loads(response.text)
+                    data = json.loads(response.text)
                 except ValueError:
                     print("Error decoding JSON response")
-                    return None
+                    data = None
+                finally:
+                    try:
+                        response.close()
+                    except Exception as e_close:
+                        print(f"Error closing response: {e_close}")
+                    gc.collect()
+                if data is not None:
+                    return data
             else:
                 print(f"Error while retrieving data. Response code: {response.status_code}")
                 oled.fill(0)
@@ -100,6 +113,12 @@ def get_data():
                     return None
         except Exception as e:
             print(f"An error occurred while retrieving data: {e}")
+            if response is not None:
+                try:
+                    response.close()
+                except Exception as e_close:
+                    print(f"Error closing response: {e_close}")
+            gc.collect()
             retry_count += 1
             if retry_count < max_retries:
                 print(f"Retrying to fetch data in {5 * retry_count} seconds...")
@@ -112,13 +131,14 @@ def get_data():
 def parse_data(json_data):
     parsed_data = []
     for row in json_data['value']:
-        date_str = row['udtczas']
-        unix_timestamp_to = time_utils.get_timestamp_from_datestring(row['udtczas'])
+        date_str = row['dtime_utc']
+        unix_timestamp_to = time_utils.get_timestamp_from_datestring(row['dtime_utc'])
         unix_timestamp_from = unix_timestamp_to - 15*60 # Move start 15 minutes before
-        
+
         # Append to list
         parsed_data.append({
             'datetime': date_str,
+            'period': row.get('period_utc'),
             'timestamp_from': unix_timestamp_from,
             'timestamp_to': unix_timestamp_to,
             'price': row['rce_pln']
@@ -229,7 +249,7 @@ def get_lowest_entries(parsed_data):
     return lowest_entries
 
 def is_time_in_range(start_timestamp, end_timestamp):
-    now_timestamp = time_utils.get_current_time()
+    now_timestamp = time_utils.get_current_time_utc()
     return start_timestamp <= now_timestamp <= end_timestamp
 
 def check_and_send_modbus_command():
@@ -248,7 +268,7 @@ while True:
     if rce_prices == None:
         rce_prices = get_rce_prices()
 
-    now = time_utils.get_current_time()
+    now = time_utils.get_current_time_utc()
     now_time = time.localtime(now)
 
     if last_time is None or last_time[4] != now_time[4]:

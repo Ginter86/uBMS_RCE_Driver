@@ -67,10 +67,11 @@ def get_data():
     led.value(1)
     
     while retry_count < max_retries:
+        gc.collect()
+        response = None
         try:
             date_string = time_utils.get_api_date()
-
-            url = f"https://api.raporty.pse.pl/api/rce-pln?$filter=doba eq '{date_string}'&$select=rce_pln,udtczas"
+            url = f"https://apimpdv2-bmgdhhajexe8aade.a01.azurefd.net/api/rce-pln?%24select=dtime%2Crce_pln&%24orderby=dtime_utc%20desc"
             oled.fill(0)
             oled.text('Getting PSE data', 0, 0)
             oled.show()
@@ -80,12 +81,19 @@ def get_data():
             if response.status_code == 200:
                 print('Data fetched')
                 led.value(0)
-                gc.collect()
                 try:
-                    return json.loads(response.text)
+                    data = json.loads(response.text)
                 except ValueError:
                     print("Error decoding JSON response")
-                    return None
+                    data = None
+                finally:
+                    try:
+                        response.close()
+                    except Exception as e_close:
+                        print(f"Error closing response: {e_close}")
+                    gc.collect()
+                if data is not None:
+                    return data
             else:
                 print(f"Error while retrieving data. Response code: {response.status_code}")
                 oled.fill(0)
@@ -100,6 +108,12 @@ def get_data():
                     return None
         except Exception as e:
             print(f"An error occurred while retrieving data: {e}")
+            if response is not None:
+                try:
+                    response.close()
+                except Exception as e_close:
+                    print(f"Error closing response: {e_close}")
+            gc.collect()
             retry_count += 1
             if retry_count < max_retries:
                 print(f"Retrying to fetch data in {5 * retry_count} seconds...")

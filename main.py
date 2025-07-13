@@ -5,6 +5,8 @@ import machine
 # import utime
 import ntptime
 import json
+
+
 import time
 import time_utils
 import config
@@ -12,6 +14,7 @@ import gc
 import ssd1306
 from machine import Pin, SoftI2C
 import uBMS_modbus
+
 import uBMS_WiFi
 import uBMS_Web
 
@@ -46,7 +49,7 @@ button = machine.Pin(button_pin, machine.Pin.IN, machine.Pin.PULL_UP)
 def button_handler(pin):
     print("Button pressed")
     oled.fill(0)
-    oled.text('AP Mode', 0, 0)
+    oled.text('AP Mode', 25, 30)
     oled.show()
     uBMS_Web.AP_start()
 
@@ -61,44 +64,33 @@ current_price = None
 
 uBMS_WiFi.wifi_connect()
 
+
 def get_data():
-    max_retries = 3
+    max_retries = 30
     retry_count = 0
     led.value(1)
-
+    
     while retry_count < max_retries:
-        gc.collect()
-        response = None
         try:
             date_string = time_utils.get_api_date()
-            # https://api.raporty.pse.pl/api/rce-pln?%24select=dtime_utc%2Crce_pln&%24filter=business_date%20eq%20%272025-06-25%27&%24orderby=dtime_utc%20desc
-            url = (
-                "https://api.raporty.pse.pl/api/rce-pln"
-                f"?$select=dtime_utc,rce_pln&$filter=business_date eq '{date_string}'"
-                "&$orderby=dtime_utc desc"
-            )
+
+            url = f"https://api.raporty.pse.pl/api/rce-pln?$select=dtime_utc,rce_pln&$filter=business_date%20eq%20%27{date_string}%27&$orderby=dtime_utc%20desc"
             oled.fill(0)
-            oled.text('Getting PSE data', 0, 0)
+            oled.text('Pobieranie ceny', 0, 0)
+
             oled.show()
             print("Requesting URL:", url)
             headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(url, headers=headers, timeout = 10)
+            response = requests.get(url, headers=headers, timeout = 1000)
             if response.status_code == 200:
                 print('Data fetched')
                 led.value(0)
+                gc.collect()
                 try:
-                    data = json.loads(response.text)
+                    return json.loads(response.text)
                 except ValueError:
                     print("Error decoding JSON response")
-                    data = None
-                finally:
-                    try:
-                        response.close()
-                    except Exception as e_close:
-                        print(f"Error closing response: {e_close}")
-                    gc.collect()
-                if data is not None:
-                    return data
+                    return None
             else:
                 print(f"Error while retrieving data. Response code: {response.status_code}")
                 oled.fill(0)
@@ -113,12 +105,6 @@ def get_data():
                     return None
         except Exception as e:
             print(f"An error occurred while retrieving data: {e}")
-            if response is not None:
-                try:
-                    response.close()
-                except Exception as e_close:
-                    print(f"Error closing response: {e_close}")
-            gc.collect()
             retry_count += 1
             if retry_count < max_retries:
                 print(f"Retrying to fetch data in {5 * retry_count} seconds...")
@@ -134,7 +120,7 @@ def parse_data(json_data):
         date_str = row['dtime_utc']
         unix_timestamp_to = time_utils.get_timestamp_from_datestring(row['dtime_utc'])
         unix_timestamp_from = unix_timestamp_to - 15*60 # Move start 15 minutes before
-
+        
         # Append to list
         parsed_data.append({
             'datetime': date_str,
@@ -161,15 +147,18 @@ def display_data(price_data, price):
         return
     print(f"Current price: {price}")
     oled.fill_rect(0, 0, 128, 8, 0)
-    oled.text(f"RCEg: {price}", 0, 0)
+    oled.text(f"{date_str}", 0, 0)
+    oled.text(f"{price} Pln/MWh", 0, 16)
     oled.show()
     range_price = price_data['max'] - price_data['min']
+
     low = price_data['min'] + range_price * config.LOWER_THRESHOLD/100
     high = price_data['min'] + range_price * config.UPPER_THRESHOLD/100
     print(range_price, low, high)
     if price < config.MINIMUM_SALE_PRICE:
         print("Price lower than 0")
-        oled.text('B', 119, 0)
+        oled.text('ladowanie max. ', 0, 32)
+        oled.text('B', 119, 52)
         oled.show()
         relay1.value(0)
         relay2.value(0)
@@ -178,7 +167,8 @@ def display_data(price_data, price):
         print("Relay 4 ON")
     elif price < low:
         print("Green")
-        oled.text('G', 119, 0)
+        oled.text('ladowanie 30% ', 0, 40)
+        oled.text('G', 119, 52)
         oled.show()
         relay1.value(1)
         relay2.value(0)
@@ -187,7 +177,8 @@ def display_data(price_data, price):
         print("Relay 1 ON")
     elif price < high:
         print("Yellow")
-        oled.text('Y', 119, 0)
+        oled.text('ladowanie 30% ', 0, 40)
+        oled.text('Y', 119, 52)
         oled.show()
         relay1.value(0)
         relay2.value(1)
@@ -196,7 +187,8 @@ def display_data(price_data, price):
         print("Relay 2 ON")
     else:
         print("Red")
-        oled.text('R', 119, 0)
+        oled.text('Rozladowanie ', 0, 40)
+        oled.text('R', 119, 52)
         oled.show()
         relay1.value(0)
         relay2.value(0)
@@ -214,10 +206,11 @@ def get_rce_prices():
     rce_prices_stats = None
     lowest_entries = None
     data = get_data()
-    rce_prices = parse_data(data)
-    rce_prices_stats = calculate_average(rce_prices)
-    lowest_entries = get_lowest_entries(rce_prices)
-    print(len(rce_prices), len(rce_prices_stats), len(lowest_entries))
+    if data is not None:
+      rce_prices = parse_data(data)
+      rce_prices_stats = calculate_average(rce_prices)
+      lowest_entries = get_lowest_entries(rce_prices)
+      print(len(rce_prices), len(rce_prices_stats), len(lowest_entries))
 
 def get_current_price(now_timestamp):
     if rce_prices is None:
@@ -248,7 +241,7 @@ def get_lowest_entries(parsed_data):
     return lowest_entries
 
 def is_time_in_range(start_timestamp, end_timestamp):
-    now_timestamp = time_utils.get_current_time_utc()
+    now_timestamp = time_utils.get_current_time()
     return start_timestamp <= now_timestamp <= end_timestamp
 
 def check_and_send_modbus_command():
@@ -267,14 +260,16 @@ while True:
     if rce_prices == None:
         rce_prices = get_rce_prices()
 
-    now = time_utils.get_current_time_utc()
+    now = time_utils.get_current_time()
     now_time = time.localtime(now)
+    date_str = time_utils.format_datetime(now_time)
 
     if last_time is None or last_time[4] != now_time[4]:
         print('Day changed, fetching new data')
         get_rce_prices()
 
         last_time = now_time
+
 
     current_price = get_current_price(now)
     if current_price is not None and rce_prices is not None:
@@ -285,8 +280,11 @@ while True:
  
     print(last_time)
     print(now_time)
-    print(len(rce_prices))
+    if  rce_prices is not None:
+       print(len(rce_prices))
 
     gc.collect()
     print("Free memory: ", gc.mem_free())
-    time.sleep(1)
+    time.sleep(60)
+
+

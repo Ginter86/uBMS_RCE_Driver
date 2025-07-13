@@ -1,3 +1,4 @@
+
 from uModBus.serial import Serial
 from uModBus.tcp import TCP
 from network import WLAN
@@ -35,3 +36,4 @@ def send_modbus_command_discharge():
         print(f'Error during register write: {e}. No data received from slave.')
     except Exception as e:
         print(f'Unexpected error during register write: {e}')
+

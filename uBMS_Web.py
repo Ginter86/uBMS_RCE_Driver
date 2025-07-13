@@ -1,3 +1,4 @@
+
 import socket
 import re
 import machine
@@ -44,6 +45,7 @@ def web_page():
             color: #333;
         }
         .form-control {
+
             margin-bottom: 15px;
         }
         .form-control label {
@@ -193,6 +195,7 @@ def save_variables(ssid, password, lower_threshold, upper_threshold, minimum_sal
             for line in lines:
                 file.write(line)
         print("Successfully saved config to config.py")
+
         machine.reset()
     except OSError as e:
         print(f"Failed to save config: {e}")
@@ -218,6 +221,7 @@ def url_decode(encoded_str):
         '%2E': '.',
         '%2F': '/',
         '%3A': ':',
+
         '%3B': ';',
         '%3C': '<',
         '%3D': '=',
@@ -294,3 +298,5 @@ def uBMS_WebPage():
         conn.send('Connection: close\n\n'.encode('utf-8'))
         conn.sendall(response.encode('utf-8'))
         conn.close()
+
+

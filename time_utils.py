@@ -1,3 +1,5 @@
+
+
 import time
 
 # Configuration for timezone and daylight saving
@@ -6,8 +8,7 @@ DAYLIGHT_SAVING_OFFSET = 1  # Additional offset during daylight saving time
 
 def get_timestamp_from_datestring(date_string):
     """
-    Converts a date string in the format 'YYYY-MM-DD HH:MM' or
-    'YYYY-MM-DD HH:MM:SS' to a Unix timestamp.
+    Converts a date string in the format 'YYYY-MM-DD HH:MM' to a Unix timestamp.
 
     Args:
         date_string (str): The date string to convert.
@@ -18,14 +19,10 @@ def get_timestamp_from_datestring(date_string):
     # Split the date and time parts
     date_part, time_part = date_string.split(' ')
     year, month, day = map(int, date_part.split('-'))
-
-    time_components = time_part.split(':')
-    hour = int(time_components[0])
-    minute = int(time_components[1])
-    second = int(time_components[2]) if len(time_components) > 2 else 0
+    hour, minute, sek = map(int, time_part.split(':'))
 
     # Create a tuple representing the date and time
-    time_tuple = (year, month, day, hour, minute, second, 0, 0, 0)
+    time_tuple = (year, month, day, hour, minute, 0, 0, 0, 0)
 
     # Use time.mktime to convert the tuple to a Unix timestamp
     unix_timestamp = int(time.mktime(time_tuple))
@@ -66,11 +63,6 @@ def get_current_time():
         local_timestamp += DAYLIGHT_SAVING_OFFSET * 3600
     return int(local_timestamp)
 
-def get_current_time_utc():
-    """Return current time as Unix timestamp in UTC."""
-    current_time = time.localtime()
-    return int(time.mktime(current_time))
-
 def get_api_date():
     current_time = time.localtime(get_current_time())
     print("API time:", current_time)
@@ -82,3 +74,11 @@ def get_api_date():
     formatted_date = "{}-{:02d}-{:02d}".format(year, month, day)
 
     return formatted_date
+
+def format_datetime(dt_tuple):
+    # dt_tuple: (YYYY, MM, DD, HH, MM, SS, ...)
+    return "{:02d}.{:02d}.{:4d} {:02d}:{:02d}".format(
+        dt_tuple[2], dt_tuple[1], dt_tuple[0], dt_tuple[3], dt_tuple[4]
+    )
+
+

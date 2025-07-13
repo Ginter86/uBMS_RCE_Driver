@@ -1,3 +1,5 @@
+
+
 import config
 import network
 import utime
@@ -64,3 +66,6 @@ def wifi_connect():
             sta.active(False)
             utime.sleep(1)
             gc.collect()
+
+
+
